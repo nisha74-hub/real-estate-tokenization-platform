@@ -10,6 +10,8 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
     using Counters for Counters.Counter;
     Counters.Counter private _tokenIdCounter;
 
+    bool public isPaused = false;
+
     struct Property {
         uint256 tokenId;
         string propertyAddress;
@@ -32,37 +34,22 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
     mapping(uint256 => mapping(address => ShareOwnership)) public shareOwnership;
     mapping(uint256 => address[]) public propertyInvestors;
 
-    event PropertyTokenized(
-        uint256 indexed tokenId,
-        string propertyAddress,
-        uint256 totalValue,
-        uint256 totalShares,
-        uint256 pricePerShare
-    );
+    event PropertyTokenized(uint256 indexed tokenId, string propertyAddress, uint256 totalValue, uint256 totalShares, uint256 pricePerShare);
+    event SharesPurchased(uint256 indexed tokenId, address indexed investor, uint256 shares, uint256 totalCost);
+    event SharesTransferred(uint256 indexed tokenId, address indexed from, address indexed to, uint256 shares);
+    event PropertyDeactivated(uint256 indexed tokenId);
+    event SharesWithdrawn(uint256 indexed tokenId, address indexed owner, uint256 shares);
+    event MetadataUpdated(uint256 indexed tokenId, string newURI);
+    event Paused();
+    event Unpaused();
 
-    event SharesPurchased(
-        uint256 indexed tokenId,
-        address indexed investor,
-        uint256 shares,
-        uint256 totalCost
-    );
-
-    event SharesTransferred(
-        uint256 indexed tokenId,
-        address indexed from,
-        address indexed to,
-        uint256 shares
-    );
+    modifier notPaused() {
+        require(!isPaused, "Contract is paused");
+        _;
+    }
 
     constructor() ERC721("RealEstateTokens", "RET") {}
 
-    /**
-     * @dev Tokenizes a real estate property by creating an NFT and dividing it into shares
-     * @param _propertyAddress Physical address of the property
-     * @param _totalValue Total valuation of the property in wei
-     * @param _totalShares Total number of shares to divide the property into
-     * @param _metadataURI IPFS URI containing property metadata
-     */
     function tokenizeProperty(
         string memory _propertyAddress,
         uint256 _totalValue,
@@ -97,40 +84,27 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
         return newTokenId;
     }
 
-    /**
-     * @dev Allows investors to purchase shares of a tokenized property
-     * @param _tokenId Token ID of the property
-     * @param _shares Number of shares to purchase
-     */
-    function purchaseShares(uint256 _tokenId, uint256 _shares) external payable nonReentrant {
+    function purchaseShares(uint256 _tokenId, uint256 _shares) external payable nonReentrant notPaused {
+        Property storage prop = properties[_tokenId];
         require(_exists(_tokenId), "Property does not exist");
-        require(properties[_tokenId].isActive, "Property is not active");
-        require(_shares > 0, "Shares must be greater than 0");
-        require(_shares <= properties[_tokenId].availableShares, "Not enough shares available");
+        require(prop.isActive, "Property not active");
+        require(_shares > 0 && _shares <= prop.availableShares, "Invalid share count");
 
-        uint256 totalCost = _shares * properties[_tokenId].pricePerShare;
+        uint256 totalCost = _shares * prop.pricePerShare;
         require(msg.value >= totalCost, "Insufficient payment");
 
-        // Update property shares
-        properties[_tokenId].availableShares -= _shares;
+        prop.availableShares -= _shares;
 
-        // Update or create share ownership record
         if (shareOwnership[_tokenId][msg.sender].shares == 0) {
             propertyInvestors[_tokenId].push(msg.sender);
-            shareOwnership[_tokenId][msg.sender] = ShareOwnership({
-                shares: _shares,
-                purchasePrice: totalCost,
-                purchaseDate: block.timestamp
-            });
+            shareOwnership[_tokenId][msg.sender] = ShareOwnership(_shares, totalCost, block.timestamp);
         } else {
             shareOwnership[_tokenId][msg.sender].shares += _shares;
             shareOwnership[_tokenId][msg.sender].purchasePrice += totalCost;
         }
 
-        // Transfer payment to property owner
-        payable(properties[_tokenId].propertyOwner).transfer(totalCost);
+        payable(prop.propertyOwner).transfer(totalCost);
 
-        // Refund excess payment
         if (msg.value > totalCost) {
             payable(msg.sender).transfer(msg.value - totalCost);
         }
@@ -138,39 +112,21 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
         emit SharesPurchased(_tokenId, msg.sender, _shares, totalCost);
     }
 
-    /**
-     * @dev Transfers shares between investors
-     * @param _tokenId Token ID of the property
-     * @param _to Address to transfer shares to
-     * @param _shares Number of shares to transfer
-     */
-    function transferShares(
-        uint256 _tokenId,
-        address _to,
-        uint256 _shares
-    ) external {
+    function transferShares(uint256 _tokenId, address _to, uint256 _shares) external notPaused {
         require(_exists(_tokenId), "Property does not exist");
-        require(_to != address(0), "Cannot transfer to zero address");
-        require(_to != msg.sender, "Cannot transfer to yourself");
+        require(_to != address(0) && _to != msg.sender, "Invalid recipient");
         require(_shares > 0, "Shares must be greater than 0");
         require(shareOwnership[_tokenId][msg.sender].shares >= _shares, "Insufficient shares");
 
-        // Update sender's shares
         shareOwnership[_tokenId][msg.sender].shares -= _shares;
 
-        // Update receiver's shares
         if (shareOwnership[_tokenId][_to].shares == 0) {
             propertyInvestors[_tokenId].push(_to);
-            shareOwnership[_tokenId][_to] = ShareOwnership({
-                shares: _shares,
-                purchasePrice: _shares * properties[_tokenId].pricePerShare,
-                purchaseDate: block.timestamp
-            });
+            shareOwnership[_tokenId][_to] = ShareOwnership(_shares, _shares * properties[_tokenId].pricePerShare, block.timestamp);
         } else {
             shareOwnership[_tokenId][_to].shares += _shares;
         }
 
-        // Remove sender from investors list if they have no more shares
         if (shareOwnership[_tokenId][msg.sender].shares == 0) {
             _removeInvestor(_tokenId, msg.sender);
         }
@@ -178,52 +134,64 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
         emit SharesTransferred(_tokenId, msg.sender, _to, _shares);
     }
 
-    /**
-     * @dev Gets property information
-     * @param _tokenId Token ID of the property
-     */
+    function deactivateProperty(uint256 _tokenId) external onlyOwner {
+        require(_exists(_tokenId), "Property does not exist");
+        properties[_tokenId].isActive = false;
+        emit PropertyDeactivated(_tokenId);
+    }
+
+    function withdrawUnsoldShares(uint256 _tokenId) external onlyOwner nonReentrant {
+        Property storage prop = properties[_tokenId];
+        require(_exists(_tokenId), "Property does not exist");
+        require(prop.isActive == false, "Property still active");
+        require(prop.availableShares > 0, "No unsold shares");
+
+        uint256 unsold = prop.availableShares;
+        prop.availableShares = 0;
+
+        emit SharesWithdrawn(_tokenId, msg.sender, unsold);
+    }
+
+    function updateMetadataURI(uint256 _tokenId, string memory _newURI) external onlyOwner {
+        require(_exists(_tokenId), "Property does not exist");
+        properties[_tokenId].metadataURI = _newURI;
+        emit MetadataUpdated(_tokenId, _newURI);
+    }
+
+    function pause() external onlyOwner {
+        isPaused = true;
+        emit Paused();
+    }
+
+    function unpause() external onlyOwner {
+        isPaused = false;
+        emit Unpaused();
+    }
+
     function getProperty(uint256 _tokenId) external view returns (Property memory) {
         require(_exists(_tokenId), "Property does not exist");
         return properties[_tokenId];
     }
 
-    /**
-     * @dev Gets share ownership information for an investor
-     * @param _tokenId Token ID of the property
-     * @param _investor Address of the investor
-     */
-    function getShareOwnership(uint256 _tokenId, address _investor) 
-        external 
-        view 
-        returns (ShareOwnership memory) 
-    {
+    function getShareOwnership(uint256 _tokenId, address _investor) external view returns (ShareOwnership memory) {
         require(_exists(_tokenId), "Property does not exist");
         return shareOwnership[_tokenId][_investor];
     }
 
-    /**
-     * @dev Gets all investors for a property
-     * @param _tokenId Token ID of the property
-     */
     function getPropertyInvestors(uint256 _tokenId) external view returns (address[] memory) {
         require(_exists(_tokenId), "Property does not exist");
         return propertyInvestors[_tokenId];
     }
 
-    /**
-     * @dev Returns the token URI for metadata
-     * @param _tokenId Token ID of the property
-     */
     function tokenURI(uint256 _tokenId) public view override returns (string memory) {
         require(_exists(_tokenId), "Property does not exist");
         return properties[_tokenId].metadataURI;
     }
 
-    /**
-     * @dev Internal function to remove an investor from the investors array
-     * @param _tokenId Token ID of the property
-     * @param _investor Address of the investor to remove
-     */
+    function getCurrentTokenId() external view returns (uint256) {
+        return _tokenIdCounter.current();
+    }
+
     function _removeInvestor(uint256 _tokenId, address _investor) internal {
         address[] storage investors = propertyInvestors[_tokenId];
         for (uint256 i = 0; i < investors.length; i++) {
@@ -233,12 +201,5 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
                 break;
             }
         }
-    }
-
-    /**
-     * @dev Gets the current token ID counter
-     */
-    function getCurrentTokenId() external view returns (uint256) {
-        return _tokenIdCounter.current();
     }
 }
