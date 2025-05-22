@@ -178,6 +178,11 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
         return shareOwnership[_tokenId][_investor];
     }
 
+    function getInvestorShares(uint256 _tokenId, address _investor) external view returns (uint256) {
+        require(_exists(_tokenId), "Property does not exist");
+        return shareOwnership[_tokenId][_investor].shares;
+    }
+
     function getPropertyInvestors(uint256 _tokenId) external view returns (address[] memory) {
         require(_exists(_tokenId), "Property does not exist");
         return propertyInvestors[_tokenId];
