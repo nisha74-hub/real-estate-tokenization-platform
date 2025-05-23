@@ -52,7 +52,7 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
 
     function tokenizeProperty(
         string memory _propertyAddress,
-        uint256 _totalValue,
+        uint256 _totalValue,]
         uint256 _totalShares,
         string memory _metadataURI
     ) external onlyOwner returns (uint256) {
