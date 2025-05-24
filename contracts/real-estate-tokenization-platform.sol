@@ -81,7 +81,7 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
 
         emit PropertyTokenized(newTokenId, _propertyAddress, _totalValue, _totalShares, pricePerShare);
 
-        return newTokenId;
+        return newTokenId
     }
 
     function purchaseShares(uint256 _tokenId, uint256 _shares) external payable nonReentrant notPaused {
