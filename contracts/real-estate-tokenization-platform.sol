@@ -8,7 +8,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
     using Counters for Counters.Counter;
-    Counters.Counter private _tokenIdCounter
+    Counters.Counter private _tokenIdCounter;
 
     bool public isPaused = false;
 
@@ -34,6 +34,7 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
     mapping(uint256 => mapping(address => ShareOwnership)) public shareOwnership;
     mapping(uint256 => address[]) public propertyInvestors;
 
+    // Events
     event PropertyTokenized(uint256 indexed tokenId, string propertyAddress, uint256 totalValue, uint256 totalShares, uint256 pricePerShare);
     event SharesPurchased(uint256 indexed tokenId, address indexed investor, uint256 shares, uint256 totalCost);
     event SharesTransferred(uint256 indexed tokenId, address indexed from, address indexed to, uint256 shares);
@@ -52,7 +53,7 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
 
     function tokenizeProperty(
         string memory _propertyAddress,
-        uint256 _totalValue,]
+        uint256 _totalValue,
         uint256 _totalShares,
         string memory _metadataURI
     ) external onlyOwner returns (uint256) {
@@ -63,7 +64,7 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
         _tokenIdCounter.increment();
         uint256 newTokenId = _tokenIdCounter.current();
 
-        _safeMint(msg.sender, newTokenId);\\
+        _safeMint(msg.sender, newTokenId);
 
         uint256 pricePerShare = _totalValue / _totalShares;
 
@@ -80,12 +81,12 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
         });
 
         emit PropertyTokenized(newTokenId, _propertyAddress, _totalValue, _totalShares, pricePerShare);
-
-        return newTokenId
+        return newTokenId;
     }
 
     function purchaseShares(uint256 _tokenId, uint256 _shares) external payable nonReentrant notPaused {
         Property storage prop = properties[_tokenId];
+
         require(_exists(_tokenId), "Property does not exist");
         require(prop.isActive, "Property not active");
         require(_shares > 0 && _shares <= prop.availableShares, "Invalid share count");
@@ -99,12 +100,14 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
             propertyInvestors[_tokenId].push(msg.sender);
             shareOwnership[_tokenId][msg.sender] = ShareOwnership(_shares, totalCost, block.timestamp);
         } else {
-            shareOwnership[_tokenId][msg.sender].shares += _shares;
-            shareOwnership[_tokenId][msg.sender].purchasePrice += totalCost;
+            ShareOwnership storage ownership = shareOwnership[_tokenId][msg.sender];
+            ownership.shares += _shares;
+            ownership.purchasePrice += totalCost;
         }
 
         payable(prop.propertyOwner).transfer(totalCost);
 
+        // Refund excess ETH
         if (msg.value > totalCost) {
             payable(msg.sender).transfer(msg.value - totalCost);
         }
@@ -143,7 +146,7 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
     function withdrawUnsoldShares(uint256 _tokenId) external onlyOwner nonReentrant {
         Property storage prop = properties[_tokenId];
         require(_exists(_tokenId), "Property does not exist");
-        require(prop.isActive == false, "Property still active");
+        require(!prop.isActive, "Property still active");
         require(prop.availableShares > 0, "No unsold shares");
 
         uint256 unsold = prop.availableShares;
@@ -168,6 +171,7 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
         emit Unpaused();
     }
 
+    // View Functions
     function getProperty(uint256 _tokenId) external view returns (Property memory) {
         require(_exists(_tokenId), "Property does not exist");
         return properties[_tokenId];
