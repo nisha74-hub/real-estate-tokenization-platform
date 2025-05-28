@@ -8,8 +8,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
     using Counters for Counters.Counter;
-    Counters.Counter private _tokenIdCounter;
-
+    Counters.Counter privat
     bool public isPaused = false;
 
     struct Pro
