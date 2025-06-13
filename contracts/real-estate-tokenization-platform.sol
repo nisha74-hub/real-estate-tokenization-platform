@@ -17,12 +17,7 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
         uint256 pricePerShare;
         string metadataURI;
         bool isActive;
-        address propertyOwner
-    struct ShareOwnership {
-        uint256 shares;
-        uint256 purchasePrice;
-        uint256 purchaseDate;
-    }
+        
 
     mapping(uint256 => Property) public properties;
     mapping(uint256 => mapping(address => ShareOwnership)) public shareOwnership;
