@@ -8,8 +8,7 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
     using Counters for Counters.Counter;
     Counters.Counter privat
     bool public isPaused
-    struct P
-        uint256 tokenId;
+    struct 
         string property
         uint256 totalValue;
         uint256 totalShares;
