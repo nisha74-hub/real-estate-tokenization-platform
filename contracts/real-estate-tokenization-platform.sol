@@ -14,11 +14,7 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
         string propertyAddress;
         uint256 totalValue;
         uint256 totalShares;
-        uint256 availableShares;
-        uint256 pricePerShare;
-        string metadataURI;
-        bool isActive;
-
+        
     mapping(uint256 => Property) public properties;
     mapping(uint256 => mapping(address => ShareOwnership)) public shareOwnership;
     mapping(uint256 => address[]) public propertyInvestors;
@@ -68,7 +64,16 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
             isActive: true,
             propertyOwner: msg.sender
         });
-
+properties[newTokenId] = Property({
+            tokenId: newTokenId,
+            propertyAddress: _propertyAddress,
+            totalValue: _totalValue,
+            totalShares: _totalShares,
+            availableShares: _totalShares,
+            pricePerShare: pricePerShare,
+            metadataURI: _metadataURI,
+            isActive: true,
+            propertyOwner: ms
         emit PropertyTokenized(newTokenId, _propertyAddress, _totalValue, _totalShares, pricePerShare);
         return newTokenId;
     }
