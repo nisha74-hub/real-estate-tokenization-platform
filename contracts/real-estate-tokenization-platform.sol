@@ -15,10 +15,6 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
         uint256 totalValue;
         uint256 totalShares;
         
-    mapping(uint256 => Property) public properties;
-    mapping(uint256 => mapping(address => ShareOwnership)) public shareOwnership;
-    mapping(uint256 => address[]) public propertyInvestors;
-
     // Events
     event PropertyTokenized(uint256 indexed tokenId, string propertyAddress, uint256 totalValue, uint256 totalShares, uint256 pricePerShare);
     event SharesPurchased(uint256 indexed tokenId, address indexed investor, uint256 shares, uint256 totalCost);
