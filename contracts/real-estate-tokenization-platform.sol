@@ -42,16 +42,7 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
         require(_totalShares > 0, "Total shares must be greater than 0");
         require(bytes(_propertyAddress).length > 0, "Property address cannot be empty");
 
-        _tokenIdCounter.increment();
-        uint256 newTokenId = _tokenIdCounter.current();
-
-        _safeMint(msg.sender, newTokenId);
-
-        uint256 pricePerShare = _totalValue / _totalShares;
-
-        properties[newTokenId] = Property({
-            tokenId: newTokenId,
-            propertyAddress: _propertyAddress,
+       
             totalValue: _totalValue,
             totalShares: _totalShares,
             availableShares: _totalShares,
