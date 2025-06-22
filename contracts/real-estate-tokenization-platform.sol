@@ -1,20 +1,39 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
+
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+
 contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
     using Counters for Counters.Counter;
-    Counters.Counter privat
-    bool public isPaused
-        string metadataURI;
-        bool isActive;
-        int256 tokenId;
+
+    Counters.Counter private _tokenIdCounter;
+    bool public isPaused;
+
+    struct Property {
+        uint256 tokenId;
         string propertyAddress;
         uint256 totalValue;
         uint256 totalShares;
-        
+        uint256 availableShares;
+        uint256 pricePerShare;
+        string metadataURI;
+        bool isActive;
+        address propertyOwner;
+    }
+
+    struct ShareOwnership {
+        uint256 shares;
+        uint256 purchasePrice;
+        uint256 timestamp;
+    }
+
+    mapping(uint256 => Property) public properties;
+    mapping(uint256 => mapping(address => ShareOwnership)) public shareOwnership;
+    mapping(uint256 => address[]) public propertyInvestors;
+
     // Events
     event PropertyTokenized(uint256 indexed tokenId, string propertyAddress, uint256 totalValue, uint256 totalShares, uint256 pricePerShare);
     event SharesPurchased(uint256 indexed tokenId, address indexed investor, uint256 shares, uint256 totalCost);
@@ -42,16 +61,12 @@ contract RealEstateTokenization is ERC721, Ownable, ReentrancyGuard {
         require(_totalShares > 0, "Total shares must be greater than 0");
         require(bytes(_propertyAddress).length > 0, "Property address cannot be empty");
 
-       
-            totalValue: _totalValue,
-            totalShares: _totalShares,
-            availableShares: _totalShares,
-            pricePerShare: pricePerShare,
-            metadataURI: _metadataURI,
-            isActive: true,
-            propertyOwner: msg.sender
-        });
-properties[newTokenId] = Property({
+        uint256 newTokenId = _tokenIdCounter.current();
+        _mint(msg.sender, newTokenId);
+
+        uint256 pricePerShare = _totalValue / _totalShares;
+
+        properties[newTokenId] = Property({
             tokenId: newTokenId,
             propertyAddress: _propertyAddress,
             totalValue: _totalValue,
@@ -60,8 +75,12 @@ properties[newTokenId] = Property({
             pricePerShare: pricePerShare,
             metadataURI: _metadataURI,
             isActive: true,
-            propertyOwner: ms
+            propertyOwner: msg.sender
+        });
+
         emit PropertyTokenized(newTokenId, _propertyAddress, _totalValue, _totalShares, pricePerShare);
+
+        _tokenIdCounter.increment();
         return newTokenId;
     }
 
@@ -88,7 +107,6 @@ properties[newTokenId] = Property({
 
         payable(prop.propertyOwner).transfer(totalCost);
 
-        // Refund excess ETH
         if (msg.value > totalCost) {
             payable(msg.sender).transfer(msg.value - totalCost);
         }
@@ -152,7 +170,6 @@ properties[newTokenId] = Property({
         emit Unpaused();
     }
 
-    // View Functions
     function getProperty(uint256 _tokenId) external view returns (Property memory) {
         require(_exists(_tokenId), "Property does not exist");
         return properties[_tokenId];
